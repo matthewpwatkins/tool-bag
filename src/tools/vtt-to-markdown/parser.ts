@@ -9,9 +9,9 @@ export interface ConversionOptions {
 }
 
 function formatTimestamp(ts: string): string {
-  // Trim to HH:MM:SS or MM:SS — drop milliseconds for readability
-  const parts = ts.split('.')
-  return parts[0].replace(/^00:/, '') // strip leading "00:" if hours are 0
+  // Strip milliseconds, remove leading "00:" (hours) if zero
+  const noMs = ts.split('.')[0]
+  return noMs.replace(/^00:/, '')
 }
 
 export function parseVtt(raw: string): VttCue[] {
@@ -19,7 +19,7 @@ export function parseVtt(raw: string): VttCue[] {
   const cues: VttCue[] = []
   let i = 0
 
-  // Skip WEBVTT header line
+  // Skip WEBVTT header and any preamble until first timestamp
   while (i < lines.length && !lines[i].includes('-->')) i++
 
   while (i < lines.length) {
@@ -27,9 +27,9 @@ export function parseVtt(raw: string): VttCue[] {
     if (!line.includes('-->')) { i++; continue }
 
     const [startRaw] = line.split('-->')
-    const start = startRaw.trim()
+    const start = formatTimestamp(startRaw.trim())
 
-    // Collect text lines after the timestamp
+    // Collect text lines after the timestamp line
     const textLines: string[] = []
     i++
     while (i < lines.length && lines[i].trim() !== '' && !lines[i].includes('-->')) {
@@ -43,12 +43,12 @@ export function parseVtt(raw: string): VttCue[] {
 
     if (speakerMatch) {
       cues.push({
-        start: formatTimestamp(start),
+        start,
         speaker: speakerMatch[1].trim(),
         text: speakerMatch[2].trim(),
       })
     } else if (fullText.trim()) {
-      cues.push({ start: formatTimestamp(start), speaker: '', text: fullText.trim() })
+      cues.push({ start, speaker: '', text: fullText.trim() })
     }
   }
 
@@ -74,9 +74,12 @@ export function vttToMarkdown(raw: string, opts: ConversionOptions): string {
 
   return merged
     .map(cue => {
-      const speaker = cue.speaker ? `**${cue.speaker}**` : '*Unknown*'
-      const timestamp = opts.includeTimestamps ? ` (${cue.start})` : ''
-      return `${speaker}${timestamp}: ${cue.text}`
+      const speaker = cue.speaker || 'Unknown'
+      // Timestamps go inside the bold name section: **Speaker (0:00:32)**: text
+      const boldLabel = opts.includeTimestamps
+        ? `**${speaker} (${cue.start})**`
+        : `**${speaker}**`
+      return `${boldLabel}: ${cue.text}`
     })
     .join('\n\n')
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Upload, Download, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFileIO } from '@/hooks/useFileIO'
 
-interface FileIOBarProps {
+interface PanelTitleBarProps {
   label: string
   value: string
   onLoad?: (content: string) => void
@@ -11,6 +12,8 @@ interface FileIOBarProps {
   downloadMime?: string
   accept?: string
   showDownload?: boolean
+  /** Slot for a format selector dropdown rendered between label and actions */
+  formatSelect?: ReactNode
 }
 
 export function FileIOBar({
@@ -21,7 +24,8 @@ export function FileIOBar({
   downloadMime = 'text/plain',
   accept = '*',
   showDownload = true,
-}: FileIOBarProps) {
+  formatSelect,
+}: PanelTitleBarProps) {
   const { openFile, downloadFile, copyToClipboard } = useFileIO()
   const [copied, setCopied] = useState(false)
 
@@ -43,26 +47,39 @@ export function FileIOBar({
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-      <div className="flex gap-1">
+    <div
+      className="flex h-8 items-center justify-between border-b px-2 shrink-0"
+      style={{ background: 'var(--panel-title-bg, hsl(var(--muted)/40%))', borderColor: 'hsl(var(--border))' }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
+          {label}
+        </span>
+        {formatSelect && <div className="flex items-center">{formatSelect}</div>}
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
         {onLoad && (
-          <Button variant="ghost" size="sm" onClick={handleOpen} title="Open file">
-            <Upload className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleOpen} title="Open file">
+            <Upload className="h-3 w-3" />
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={handleCopy} title="Copy">
-          {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy} title="Copy">
+          {copied ? (
+            <Check className="h-3 w-3 text-green-500" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
         </Button>
         {showDownload && (
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
+            className="h-6 w-6"
             onClick={() => downloadFile(value, downloadFilename, downloadMime)}
             title="Download"
             disabled={!value}
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3 w-3" />
           </Button>
         )}
       </div>

@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
-import { Play, ArrowRight } from 'lucide-react'
-import { useRunShortcut } from '@/hooks/useRunShortcut'
+import { Play } from 'lucide-react'
 import yaml from 'js-yaml'
 import { XMLParser, XMLBuilder } from 'fast-xml-parser'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
 import { DualPanelLayout } from '@/components/layout/DualPanelLayout'
+import { ToolToolbar } from '@/components/layout/ToolToolbar'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useRunShortcut } from '@/hooks/useRunShortcut'
 
 type Format = 'json' | 'yaml' | 'xml'
 
@@ -47,6 +48,21 @@ function stringify(data: unknown, format: Format): string {
   }
 }
 
+function FormatSelect({ value, onChange }: { value: Format; onChange: (v: Format) => void }) {
+  return (
+    <Select value={value} onValueChange={v => onChange(v as Format)}>
+      <SelectTrigger className="h-5 w-20 text-[11px] border-0 bg-transparent px-1 focus:ring-0 gap-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="json">JSON</SelectItem>
+        <SelectItem value="yaml">YAML</SelectItem>
+        <SelectItem value="xml">XML</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
 export default function JsonYamlXml() {
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
@@ -70,42 +86,25 @@ export default function JsonYamlXml() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background shrink-0 flex-wrap">
-        <Select value={from} onValueChange={v => setFrom(v as Format)}>
-          <SelectTrigger className="w-24 h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="json">JSON</SelectItem>
-            <SelectItem value="yaml">YAML</SelectItem>
-            <SelectItem value="xml">XML</SelectItem>
-          </SelectContent>
-        </Select>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        <Select value={to} onValueChange={v => setTo(v as Format)}>
-          <SelectTrigger className="w-24 h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="json">JSON</SelectItem>
-            <SelectItem value="yaml">YAML</SelectItem>
-            <SelectItem value="xml">XML</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button size="sm" onClick={run} className="gap-1.5">
-          <Play className="h-3.5 w-3.5" />
-          Convert
-        </Button>
-        {error && <span className="text-xs text-destructive">{error}</span>}
-      </div>
+      <ToolToolbar
+        error={error}
+        right={
+          <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
+            <Play className="h-3 w-3" />
+            Convert
+          </Button>
+        }
+      />
       <DualPanelLayout
         left={
           <>
             <FileIOBar
-              label={`Input (${from.toUpperCase()})`}
+              label="Input"
               value={input}
               onLoad={setInput}
               accept={`.${EXT[from]}`}
+              showDownload={false}
+              formatSelect={<FormatSelect value={from} onChange={setFrom} />}
             />
             <div className="flex-1">
               <CodeEditor value={input} onChange={setInput} language={LANGUAGES[from]} />
@@ -115,11 +114,12 @@ export default function JsonYamlXml() {
         right={
           <>
             <FileIOBar
-              label={`Output (${to.toUpperCase()})`}
+              label="Output"
               value={output}
               downloadFilename={`output.${EXT[to]}`}
               downloadMime={MIME[to]}
               showDownload
+              formatSelect={<FormatSelect value={to} onChange={setTo} />}
             />
             <div className="flex-1">
               <CodeEditor value={output} language={LANGUAGES[to]} readOnly />

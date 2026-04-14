@@ -1,4 +1,4 @@
-import Editor from '@monaco-editor/react'
+import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useState } from 'react'
 
 interface CodeEditorProps {
@@ -6,8 +6,8 @@ interface CodeEditorProps {
   onChange?: (value: string) => void
   language?: string
   readOnly?: boolean
-  placeholder?: string
   minHeight?: string
+  onMount?: OnMount
 }
 
 export function CodeEditor({
@@ -16,6 +16,7 @@ export function CodeEditor({
   language = 'plaintext',
   readOnly = false,
   minHeight = '200px',
+  onMount,
 }: CodeEditorProps) {
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains('dark')
@@ -25,7 +26,10 @@ export function CodeEditor({
     const observer = new MutationObserver(() => {
       setIsDark(document.documentElement.classList.contains('dark'))
     })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
     return () => observer.disconnect()
   }, [])
 
@@ -37,6 +41,15 @@ export function CodeEditor({
         value={value}
         theme={isDark ? 'vs-dark' : 'vs'}
         onChange={v => onChange?.(v ?? '')}
+        onMount={onMount}
+        beforeMount={monaco => {
+          monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+            target: monaco.languages.typescript.ScriptTarget.ES2020,
+            allowNonTsExtensions: true,
+            noEmit: false,
+            strict: false,
+          })
+        }}
         options={{
           readOnly,
           minimap: { enabled: false },
@@ -49,6 +62,7 @@ export function CodeEditor({
           padding: { top: 8, bottom: 8 },
           renderWhitespace: 'none',
           fixedOverflowWidgets: true,
+          scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
         }}
       />
     </div>
