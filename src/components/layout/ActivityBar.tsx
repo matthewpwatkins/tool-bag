@@ -1,4 +1,4 @@
-import { Settings2, Shuffle, BookOpen, Zap, Sun, Moon } from 'lucide-react'
+import { Settings2, Shuffle, BookOpen, Zap, Sun, Moon, HelpCircle } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { CATEGORY_LABELS, type ToolCategory } from '@/tools/types'
 
@@ -15,6 +15,7 @@ interface ActivityBarProps {
   activeCategory: ToolCategory
   sidebarOpen: boolean
   onCategoryClick: (cat: ToolCategory) => void
+  onHelpClick: () => void
 }
 
 interface ActivityItemProps {
@@ -50,7 +51,7 @@ function ActivityItem({ title, isActive, onClick, children }: ActivityItemProps)
   )
 }
 
-export function ActivityBar({ activeCategory, sidebarOpen, onCategoryClick }: ActivityBarProps) {
+export function ActivityBar({ activeCategory, sidebarOpen, onCategoryClick, onHelpClick }: ActivityBarProps) {
   const { theme, toggle } = useTheme()
 
   return (
@@ -73,7 +74,10 @@ export function ActivityBar({ activeCategory, sidebarOpen, onCategoryClick }: Ac
         )
       })}
 
-      <div className="mt-auto mb-1">
+      <div className="mt-auto mb-1 flex flex-col items-center">
+        <ActivityItem title="Help" isActive={false} onClick={onHelpClick}>
+          <HelpCircle className="h-5 w-5" />
+        </ActivityItem>
         <ActivityItem
           title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           isActive={false}

@@ -1,15 +1,8 @@
 import { useState, useCallback } from 'react'
 import { Play, Minimize2 } from 'lucide-react'
 import * as prettier from 'prettier/standalone'
-import * as parserBabel from 'prettier/plugins/babel'
-import * as parserEstree from 'prettier/plugins/estree'
-import * as parserTypeScript from 'prettier/plugins/typescript'
-import * as parserHtml from 'prettier/plugins/html'
-import * as parserPostcss from 'prettier/plugins/postcss'
-import * as parserMarkdown from 'prettier/plugins/markdown'
 import yaml from 'js-yaml'
 import { XMLParser, XMLBuilder } from 'fast-xml-parser'
-import { minify } from 'terser'
 import type { editor as monacoEditor } from 'monaco-editor'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
@@ -20,6 +13,7 @@ import { useRunShortcut } from '@/hooks/useRunShortcut'
 import { useToolPrefs } from '@/hooks/useToolPrefs'
 import { useFileIO } from '@/hooks/useFileIO'
 import { useMenubarActions } from '@/hooks/useMenubarActions'
+import { parseJsonc } from '@/lib/jsonc'
 
 type Language = 'json' | 'javascript' | 'typescript' | 'html' | 'css' | 'yaml' | 'xml' | 'markdown'
 
@@ -35,7 +29,7 @@ const LANG_OPTIONS = [
 ] as const
 
 const MONO_LANG: Record<Language, string> = {
-  json: 'json', javascript: 'javascript', typescript: 'typescript',
+  json: 'jsonc', javascript: 'javascript', typescript: 'typescript',
   html: 'html', css: 'css', yaml: 'yaml', xml: 'xml', markdown: 'markdown',
 }
 
@@ -52,7 +46,7 @@ function detectLanguage(text: string): Language | null {
   if (/^<!DOCTYPE\s+html/i.test(t) || /^<html/i.test(t)) return 'html'
   if (t.startsWith('<') && (t.includes('</') || t.endsWith('/>'))) return 'xml'
   if (t.startsWith('{') || t.startsWith('[')) {
-    try { JSON.parse(t); return 'json' } catch { /* not json */ }
+    try { parseJsonc(t); return 'json' } catch { /* not json */ }
   }
   if (t.startsWith('---') || /^[a-zA-Z_-]+:\s/m.test(t)) return 'yaml'
   if (/^#+\s/m.test(t) || /\*\*.+\*\*/m.test(t)) return 'markdown'
@@ -62,34 +56,53 @@ function detectLanguage(text: string): Language | null {
   return null
 }
 
+// Lazy-load each prettier parser + terser so they split into separate chunks
+// and are only fetched when the user actually formats that language.
 async function formatCode(code: string, lang: Language): Promise<string> {
   switch (lang) {
-    case 'json': return JSON.stringify(JSON.parse(code), null, 2)
-    case 'javascript':
-      return prettier.format(code, { parser: 'babel', plugins: [parserBabel, parserEstree], semi: true, singleQuote: true, printWidth: 100 })
-    case 'typescript':
-      return prettier.format(code, { parser: 'typescript', plugins: [parserTypeScript, parserEstree], semi: true, singleQuote: true, printWidth: 100 })
-    case 'html':
-      return prettier.format(code, { parser: 'html', plugins: [parserHtml], printWidth: 100 })
-    case 'css':
-      return prettier.format(code, { parser: 'css', plugins: [parserPostcss], singleQuote: true })
+    case 'json': return JSON.stringify(parseJsonc(code), null, 2)
+    case 'javascript': {
+      const [babel, estree] = await Promise.all([
+        import('prettier/plugins/babel'),
+        import('prettier/plugins/estree'),
+      ])
+      return prettier.format(code, { parser: 'babel', plugins: [babel, estree], semi: true, singleQuote: true, printWidth: 100 })
+    }
+    case 'typescript': {
+      const [ts, estree] = await Promise.all([
+        import('prettier/plugins/typescript'),
+        import('prettier/plugins/estree'),
+      ])
+      return prettier.format(code, { parser: 'typescript', plugins: [ts, estree], semi: true, singleQuote: true, printWidth: 100 })
+    }
+    case 'html': {
+      const html = await import('prettier/plugins/html')
+      return prettier.format(code, { parser: 'html', plugins: [html], printWidth: 100 })
+    }
+    case 'css': {
+      const postcss = await import('prettier/plugins/postcss')
+      return prettier.format(code, { parser: 'css', plugins: [postcss], singleQuote: true })
+    }
     case 'yaml': return yaml.dump(yaml.load(code) as object, { indent: 2 })
     case 'xml': {
       const parser = new XMLParser({ ignoreAttributes: false })
       const builder = new XMLBuilder({ ignoreAttributes: false, format: true })
       return builder.build(parser.parse(code))
     }
-    case 'markdown':
-      return prettier.format(code, { parser: 'markdown', plugins: [parserMarkdown], proseWrap: 'preserve' })
+    case 'markdown': {
+      const md = await import('prettier/plugins/markdown')
+      return prettier.format(code, { parser: 'markdown', plugins: [md], proseWrap: 'preserve' })
+    }
     default: return code
   }
 }
 
 async function minifyCode(code: string, lang: Language): Promise<string> {
   switch (lang) {
-    case 'json': return JSON.stringify(JSON.parse(code))
+    case 'json': return JSON.stringify(parseJsonc(code))
     case 'javascript':
     case 'typescript': {
+      const { minify } = await import('terser')
       const result = await minify(code, { compress: true, mangle: true })
       return result.code ?? ''
     }
@@ -97,9 +110,21 @@ async function minifyCode(code: string, lang: Language): Promise<string> {
   }
 }
 
+const DEFAULT_INPUT = `// Star Wars character roster — paste your own JSON, JS, TS, HTML, CSS, YAML, XML, or Markdown
+// Press Format (or Ctrl+Enter) to clean it up.
+{ "faction":"Galactic Republic",  "year": -19,
+  "members": [
+{"name":"Anakin Skywalker","rank":"Jedi Knight","midichlorians":27000 /* highest ever recorded */},
+    {  "name":"Obi-Wan Kenobi","rank":"Jedi Master","midichlorians":13400},
+    {"name":"Yoda","rank":"Grand Master","midichlorians":17700},
+    {  "name":"Mace Windu",  "rank":"Jedi Master","midichlorians":12000},
+  // fallen member
+  {"name":"Count Dooku","rank":"Sith Lord","midichlorians":13500}
+  ]}`
+
 export default function Formatter() {
   const [lang, setLang] = useState<Language>('json')
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(DEFAULT_INPUT)
   const [output, setOutput] = useState('')
   const [error, setError] = useState('')
   const { panelMode, setPanelMode } = useToolPrefs('formatter')

@@ -1,6 +1,19 @@
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { Monaco } from '@monaco-editor/react'
+// Reuse Monaco's built-in JSON tokenizer with comment support enabled.
+// This gives identical token scopes (string.key.json, string.value.json, etc.)
+// and therefore identical VS Code theme colors.
+import { createTokenizationSupport } from 'monaco-editor/esm/vs/language/json/tokenization.js'
+
+let jsoncRegistered = false
+function ensureJsoncLanguage(monaco: Monaco) {
+  if (jsoncRegistered) return
+  jsoncRegistered = true
+  monaco.languages.register({ id: 'jsonc' })
+  monaco.languages.setTokensProvider('jsonc', createTokenizationSupport(true))
+}
 
 interface CodeEditorProps {
   value: string
@@ -48,6 +61,7 @@ export function CodeEditor({
           onChange={v => onChange?.(v ?? '')}
           onMount={onMount}
           beforeMount={monaco => {
+            ensureJsoncLanguage(monaco)
             monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
               target: monaco.languages.typescript.ScriptTarget.ES2020,
               allowNonTsExtensions: true,

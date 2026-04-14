@@ -4,9 +4,14 @@ import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from
 import { ActivityBar } from './ActivityBar'
 import { SidebarPanel } from './SidebarPanel'
 import { AppMenubar } from './AppMenubar'
+import { HelpModal } from './HelpModal'
 import { MenubarProvider } from '@/contexts/MenubarContext'
 import { registry } from '@/tools/registry'
 import { type ToolCategory } from '@/tools/types'
+
+const HELP_SEEN_KEY = 'toolbox-help-seen'
+function hasSeenHelp() { try { return localStorage.getItem(HELP_SEEN_KEY) === 'true' } catch { return true } }
+function markHelpSeen() { try { localStorage.setItem(HELP_SEEN_KEY, 'true') } catch { /* noop */ } }
 
 const SIDEBAR_WIDTH_KEY = 'toolbox-sidebar-width'
 const SIDEBAR_OPEN_KEY = 'toolbox-sidebar-open'
@@ -37,6 +42,8 @@ export function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const sidebarRef = useRef<ImperativePanelHandle>(null)
+
+  const [helpOpen, setHelpOpen] = useState(() => !hasSeenHelp())
 
   const [sidebarOpen, setSidebarOpen] = useState(getInitialOpen)
   const [activeCategory, setActiveCategory] = useState<ToolCategory>(() => {
@@ -80,11 +87,14 @@ export function AppShell() {
         {/* Full-width menu bar at the very top, like VS Code */}
         <AppMenubar />
 
+        <HelpModal open={helpOpen} onClose={() => { markHelpSeen(); setHelpOpen(false) }} />
+
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar
             activeCategory={activeCategory}
             sidebarOpen={sidebarOpen}
             onCategoryClick={handleCategoryClick}
+            onHelpClick={() => setHelpOpen(true)}
           />
 
           <PanelGroup

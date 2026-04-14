@@ -23,8 +23,55 @@ interface LintResult {
   errorDetail: string | null
 }
 
+const DEFAULT_INPUT = `# Star Wars: A New Hope
+
+> "A long time ago in a galaxy far, far away..."
+
+## Synopsis
+
+The **Galactic Empire** has constructed a planet-destroying superweapon known as the *Death Star*. Princess Leia intercepts the plans and hides them in the droid **R2-D2** before her ship is captured by Darth Vader.
+
+## Main Characters
+
+| Character | Affiliation | Species |
+|-----------|-------------|---------|
+| Luke Skywalker | Rebel Alliance | Human |
+| Han Solo | Rebel Alliance | Human |
+| Princess Leia | Rebel Alliance | Human |
+| Darth Vader | Galactic Empire | Human (Cyborg) |
+| Obi-Wan Kenobi | Jedi Order | Human |
+| Chewbacca | Rebel Alliance | Wookiee |
+
+## The Force
+
+Those who are sensitive to the Force can:
+
+- **Sense** events and emotions from afar
+- **Move** objects with their mind (telekinesis)
+- **Influence** the weak-minded (Jedi mind trick)
+- **Accelerate** healing and physical ability
+
+## Memorable Quotes
+
+1. "May the Force be with you." — General Dodonna
+2. "Use the Force, Luke." — Obi-Wan Kenobi
+3. "I find your lack of faith disturbing." — Darth Vader
+4. "Do or do not. There is no try." — Yoda
+
+## Kessel Run
+
+Han Solo famously made the Kessel Run in \`12 parsecs\`. The route required navigating near the Maw cluster of black holes, and a shorter path meant a faster time — it was a test of *nerve*, not speed.
+
+\`\`\`
+Distance: 12 parsecs
+Ship: Millennium Falcon
+Pilot: Han Solo
+Copilot: Chewbacca
+\`\`\`
+`
+
 export default function MarkdownEditor() {
-  const [input, setInput] = useState('# Hello\n\nStart typing your markdown here...\n')
+  const [input, setInput] = useState(DEFAULT_INPUT)
   const [lintResults, setLintResults] = useState<LintResult[] | null>(null)
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
