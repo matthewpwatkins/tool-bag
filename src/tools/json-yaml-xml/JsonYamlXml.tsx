@@ -1,0 +1,132 @@
+import { useState, useCallback } from 'react'
+import { Play, ArrowRight } from 'lucide-react'
+import { useRunShortcut } from '@/hooks/useRunShortcut'
+import yaml from 'js-yaml'
+import { XMLParser, XMLBuilder } from 'fast-xml-parser'
+import { CodeEditor } from '@/components/editor/CodeEditor'
+import { FileIOBar } from '@/components/editor/FileIOBar'
+import { DualPanelLayout } from '@/components/layout/DualPanelLayout'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+type Format = 'json' | 'yaml' | 'xml'
+
+const LANGUAGES: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' }
+const EXT: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' }
+const MIME: Record<Format, string> = {
+  json: 'application/json',
+  yaml: 'text/yaml',
+  xml: 'application/xml',
+}
+
+function parse(input: string, format: Format): unknown {
+  switch (format) {
+    case 'json': return JSON.parse(input)
+    case 'yaml': return yaml.load(input)
+    case 'xml': {
+      const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+      return parser.parse(input)
+    }
+  }
+}
+
+function stringify(data: unknown, format: Format): string {
+  switch (format) {
+    case 'json': return JSON.stringify(data, null, 2)
+    case 'yaml': return yaml.dump(data, { indent: 2 })
+    case 'xml': {
+      const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true })
+      return builder.build(data)
+    }
+  }
+}
+
+export default function JsonYamlXml() {
+  const [input, setInput] = useState('')
+  const [output, setOutput] = useState('')
+  const [from, setFrom] = useState<Format>('json')
+  const [to, setTo] = useState<Format>('yaml')
+  const [error, setError] = useState('')
+
+  const run = useCallback(() => {
+    setError('')
+    if (!input.trim()) return
+    try {
+      const parsed = parse(input, from)
+      setOutput(stringify(parsed, to))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setOutput('')
+    }
+  }, [input, from, to])
+
+  useRunShortcut(run)
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background shrink-0 flex-wrap">
+        <Select value={from} onValueChange={v => setFrom(v as Format)}>
+          <SelectTrigger className="w-24 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="json">JSON</SelectItem>
+            <SelectItem value="yaml">YAML</SelectItem>
+            <SelectItem value="xml">XML</SelectItem>
+          </SelectContent>
+        </Select>
+        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        <Select value={to} onValueChange={v => setTo(v as Format)}>
+          <SelectTrigger className="w-24 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="json">JSON</SelectItem>
+            <SelectItem value="yaml">YAML</SelectItem>
+            <SelectItem value="xml">XML</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" onClick={run} className="gap-1.5">
+          <Play className="h-3.5 w-3.5" />
+          Convert
+        </Button>
+        {error && <span className="text-xs text-destructive">{error}</span>}
+      </div>
+      <DualPanelLayout
+        left={
+          <>
+            <FileIOBar
+              label={`Input (${from.toUpperCase()})`}
+              value={input}
+              onLoad={setInput}
+              accept={`.${EXT[from]}`}
+            />
+            <div className="flex-1">
+              <CodeEditor value={input} onChange={setInput} language={LANGUAGES[from]} />
+            </div>
+          </>
+        }
+        right={
+          <>
+            <FileIOBar
+              label={`Output (${to.toUpperCase()})`}
+              value={output}
+              downloadFilename={`output.${EXT[to]}`}
+              downloadMime={MIME[to]}
+              showDownload
+            />
+            <div className="flex-1">
+              <CodeEditor value={output} language={LANGUAGES[to]} readOnly />
+            </div>
+          </>
+        }
+      />
+    </div>
+  )
+}
