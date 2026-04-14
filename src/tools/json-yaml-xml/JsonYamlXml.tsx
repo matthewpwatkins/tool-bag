@@ -4,26 +4,25 @@ import yaml from 'js-yaml'
 import { XMLParser, XMLBuilder } from 'fast-xml-parser'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
+import { StatusBarSelect } from '@/components/editor/StatusBarSelect'
 import { DualPanelLayout } from '@/components/layout/DualPanelLayout'
-import { ToolToolbar } from '@/components/layout/ToolToolbar'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useRunShortcut } from '@/hooks/useRunShortcut'
+import { useFileIO } from '@/hooks/useFileIO'
+import { useMenubarActions } from '@/hooks/useMenubarActions'
 
 type Format = 'json' | 'yaml' | 'xml'
 
-const LANGUAGES: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' }
+const FORMAT_OPTIONS = [
+  ['json', 'JSON'],
+  ['yaml', 'YAML'],
+  ['xml', 'XML'],
+] as const
+
+const MONO_LANG: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' }
 const EXT: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' }
 const MIME: Record<Format, string> = {
-  json: 'application/json',
-  yaml: 'text/yaml',
-  xml: 'application/xml',
+  json: 'application/json', yaml: 'text/yaml', xml: 'application/xml',
 }
 
 function parse(input: string, format: Format): unknown {
@@ -48,19 +47,15 @@ function stringify(data: unknown, format: Format): string {
   }
 }
 
-function FormatSelect({ value, onChange }: { value: Format; onChange: (v: Format) => void }) {
-  return (
-    <Select value={value} onValueChange={v => onChange(v as Format)}>
-      <SelectTrigger className="h-5 w-20 text-[11px] border-0 bg-transparent px-1 focus:ring-0 gap-1">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="json">JSON</SelectItem>
-        <SelectItem value="yaml">YAML</SelectItem>
-        <SelectItem value="xml">XML</SelectItem>
-      </SelectContent>
-    </Select>
-  )
+function detectFormat(text: string): Format | null {
+  const t = text.trim()
+  if (!t) return null
+  if (t.startsWith('<')) return 'xml'
+  if (t.startsWith('{') || t.startsWith('[')) {
+    try { JSON.parse(t); return 'json' } catch { /* not json */ }
+  }
+  if (/^[a-zA-Z_-]+:\s/m.test(t) || t.startsWith('---')) return 'yaml'
+  return null
 }
 
 export default function JsonYamlXml() {
@@ -69,6 +64,7 @@ export default function JsonYamlXml() {
   const [from, setFrom] = useState<Format>('json')
   const [to, setTo] = useState<Format>('yaml')
   const [error, setError] = useState('')
+  const { openFile, downloadFile, copyToClipboard } = useFileIO()
 
   const run = useCallback(() => {
     setError('')
@@ -84,49 +80,86 @@ export default function JsonYamlXml() {
 
   useRunShortcut(run)
 
+  const handleOpen = useCallback(async () => {
+    try {
+      const text = await openFile(`.${EXT[from]},*`)
+      setInput(text)
+      const detected = detectFormat(text)
+      if (detected) setFrom(detected)
+    } catch { /* cancelled */ }
+  }, [openFile, from])
+
+  const handleSave = useCallback(() => {
+    downloadFile(output, `output.${EXT[to]}`, MIME[to])
+  }, [downloadFile, output, to])
+
+  const handleCopy = useCallback(async () => {
+    await copyToClipboard(output)
+  }, [copyToClipboard, output])
+
+  useMenubarActions({
+    fileOpen: handleOpen,
+    fileSave: handleSave,
+    fileSaveDisabled: !output,
+    editCopy: handleCopy,
+    editCopyDisabled: !output,
+  })
+
   return (
-    <div className="flex flex-col h-full">
-      <ToolToolbar
-        error={error}
-        right={
-          <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
-            <Play className="h-3 w-3" />
-            Convert
-          </Button>
-        }
-      />
-      <DualPanelLayout
-        left={
-          <>
-            <FileIOBar
-              label="Input"
+    <DualPanelLayout
+      left={
+        <>
+          <FileIOBar
+            label="Input"
+            actions={
+              <div className="flex items-center gap-1">
+                {error && <span className="text-[11px] text-destructive max-w-[180px] truncate">{error}</span>}
+                <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
+                  <Play className="h-3 w-3" />
+                  Convert
+                </Button>
+              </div>
+            }
+          />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor
               value={input}
-              onLoad={setInput}
-              accept={`.${EXT[from]}`}
-              showDownload={false}
-              formatSelect={<FormatSelect value={from} onChange={setFrom} />}
+              onChange={text => {
+                setInput(text)
+                const detected = detectFormat(text)
+                if (detected && detected !== from) setFrom(detected)
+              }}
+              language={MONO_LANG[from]}
+              footer={
+                <StatusBarSelect
+                  value={from}
+                  options={FORMAT_OPTIONS}
+                  onChange={v => setFrom(v as Format)}
+                />
+              }
             />
-            <div className="flex-1">
-              <CodeEditor value={input} onChange={setInput} language={LANGUAGES[from]} />
-            </div>
-          </>
-        }
-        right={
-          <>
-            <FileIOBar
-              label="Output"
+          </div>
+        </>
+      }
+      right={
+        <>
+          <FileIOBar label="Output" />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor
               value={output}
-              downloadFilename={`output.${EXT[to]}`}
-              downloadMime={MIME[to]}
-              showDownload
-              formatSelect={<FormatSelect value={to} onChange={setTo} />}
+              language={MONO_LANG[to]}
+              readOnly
+              footer={
+                <StatusBarSelect
+                  value={to}
+                  options={FORMAT_OPTIONS}
+                  onChange={v => setTo(v as Format)}
+                />
+              }
             />
-            <div className="flex-1">
-              <CodeEditor value={output} language={LANGUAGES[to]} readOnly />
-            </div>
-          </>
-        }
-      />
-    </div>
+          </div>
+        </>
+      }
+    />
   )
 }

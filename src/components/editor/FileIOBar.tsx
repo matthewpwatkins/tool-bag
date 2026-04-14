@@ -1,87 +1,34 @@
-import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Upload, Download, Copy, Check } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { useFileIO } from '@/hooks/useFileIO'
 
-interface PanelTitleBarProps {
+interface FileIOBarProps {
   label: string
-  value: string
-  onLoad?: (content: string) => void
-  downloadFilename?: string
-  downloadMime?: string
-  accept?: string
-  showDownload?: boolean
-  /** Slot for a format selector dropdown rendered between label and actions */
-  formatSelect?: ReactNode
+  /** Action buttons (Format, Run, Lint…) placed in the tab bar to the right */
+  actions?: ReactNode
 }
 
-export function FileIOBar({
-  label,
-  value,
-  onLoad,
-  downloadFilename = 'output.txt',
-  downloadMime = 'text/plain',
-  accept = '*',
-  showDownload = true,
-  formatSelect,
-}: PanelTitleBarProps) {
-  const { openFile, downloadFile, copyToClipboard } = useFileIO()
-  const [copied, setCopied] = useState(false)
-
-  async function handleOpen() {
-    try {
-      const text = await openFile(accept)
-      onLoad?.(text)
-    } catch {
-      // cancelled
-    }
-  }
-
-  async function handleCopy() {
-    const ok = await copyToClipboard(value)
-    if (ok) {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    }
-  }
-
+/**
+ * Panel header styled as a VS Code editor tab.
+ *
+ * Layout:
+ *   [Tab: label | blue top border, editor bg] [Tab-bar spacer: actions right-aligned]
+ *
+ * The tab background matches the editor (`#1e1e1e` dark / `#fff` light) so it
+ * blends seamlessly into the Monaco editor below it.
+ */
+export function FileIOBar({ label, actions }: FileIOBarProps) {
   return (
-    <div
-      className="flex h-8 items-center justify-between border-b px-2 shrink-0"
-      style={{ background: 'var(--panel-title-bg, hsl(var(--muted)/40%))', borderColor: 'hsl(var(--border))' }}
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-          {label}
-        </span>
-        {formatSelect && <div className="flex items-center">{formatSelect}</div>}
+    <div className="flex h-9 items-stretch shrink-0 bg-[#f3f3f3] dark:bg-[#252526]">
+      {/* The tab itself */}
+      <div
+        className="flex items-center px-4 text-[13px] text-foreground bg-white dark:bg-[#1e1e1e] border-r border-[#e7e7e7] dark:border-[#3c3c3c] shrink-0 select-none"
+        style={{ borderTop: '2px solid #0078d4' }}
+      >
+        {label}
       </div>
-      <div className="flex items-center gap-0.5 shrink-0">
-        {onLoad && (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleOpen} title="Open file">
-            <Upload className="h-3 w-3" />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleCopy} title="Copy">
-          {copied ? (
-            <Check className="h-3 w-3 text-green-500" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
-        </Button>
-        {showDownload && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => downloadFile(value, downloadFilename, downloadMime)}
-            title="Download"
-            disabled={!value}
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-        )}
+
+      {/* Remaining tab-bar area — holds action buttons, has bottom border */}
+      <div className="flex flex-1 items-center justify-end gap-1 px-2 border-b border-[#e7e7e7] dark:border-[#3c3c3c]">
+        {actions}
       </div>
     </div>
   )

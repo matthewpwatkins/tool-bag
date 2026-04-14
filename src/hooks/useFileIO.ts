@@ -1,5 +1,7 @@
+import { useCallback } from 'react'
+
 export function useFileIO() {
-  function openFile(accept = '*'): Promise<string> {
+  const openFile = useCallback((accept = '*'): Promise<string> => {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input')
       input.type = 'file'
@@ -14,9 +16,9 @@ export function useFileIO() {
       }
       input.click()
     })
-  }
+  }, [])
 
-  function downloadFile(content: string, filename: string, mimeType = 'text/plain') {
+  const downloadFile = useCallback((content: string, filename: string, mimeType = 'text/plain') => {
     const blob = new Blob([content], { type: mimeType })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -24,16 +26,16 @@ export function useFileIO() {
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
-  }
+  }, [])
 
-  async function copyToClipboard(content: string): Promise<boolean> {
+  const copyToClipboard = useCallback(async (content: string): Promise<boolean> => {
     try {
       await navigator.clipboard.writeText(content)
       return true
     } catch {
       return false
     }
-  }
+  }, [])
 
   return { openFile, downloadFile, copyToClipboard }
 }

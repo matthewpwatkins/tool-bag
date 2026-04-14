@@ -7,11 +7,12 @@ import type { Monaco } from '@monaco-editor/react'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
 import { DualPanelLayout } from '@/components/layout/DualPanelLayout'
-import { ToolToolbar } from '@/components/layout/ToolToolbar'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { useToolPrefs } from '@/hooks/useToolPrefs'
+import { useFileIO } from '@/hooks/useFileIO'
+import { useMenubarActions } from '@/hooks/useMenubarActions'
 
 marked.setOptions({ async: false })
 
@@ -28,6 +29,7 @@ export default function MarkdownEditor() {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const { panelMode, setPanelMode } = useToolPrefs('markdown-editor')
+  const { openFile, downloadFile, copyToClipboard } = useFileIO()
 
   const html = marked(input) as string
 
@@ -40,8 +42,6 @@ export default function MarkdownEditor() {
       errorDetail: r.errorDetail,
     }))
     setLintResults(issues)
-
-    // Show inline Monaco markers
     if (editorRef.current && monacoRef.current) {
       const model = editorRef.current.getModel()
       if (model) {
@@ -58,47 +58,66 @@ export default function MarkdownEditor() {
     }
   }, [input])
 
-  function clearLint() {
+  const clearLint = useCallback(() => {
     setLintResults(null)
     if (editorRef.current && monacoRef.current) {
       const model = editorRef.current.getModel()
-      if (model) {
-        monacoRef.current.editor.setModelMarkers(model, 'markdownlint', [])
-      }
+      if (model) monacoRef.current.editor.setModelMarkers(model, 'markdownlint', [])
     }
-  }
+  }, [])
 
-  const toolbar = (
-    <ToolToolbar
-      left={
-        lintResults !== null && (
-          <span className="text-xs text-muted-foreground">
-            {lintResults.length === 0 ? '✓ No issues' : `${lintResults.length} lint issue${lintResults.length === 1 ? '' : 's'}`}
-          </span>
-        )
-      }
-      right={
-        <Button size="sm" variant="outline" onClick={lintResults !== null ? clearLint : runLint} className="h-6 px-2 text-xs gap-1">
-          <CheckSquare className="h-3 w-3" />
-          {lintResults !== null ? 'Clear Lint' : 'Lint'}
-        </Button>
-      }
-      panelMode={panelMode}
-      onPanelModeChange={setPanelMode}
-    />
-  )
+  const handleOpen = useCallback(async () => {
+    try {
+      const text = await openFile('.md,.markdown,.txt')
+      setInput(text)
+      clearLint()
+    } catch { /* cancelled */ }
+  }, [openFile, clearLint])
+
+  const handleSave = useCallback(() => {
+    downloadFile(input, 'document.md', 'text/markdown')
+  }, [downloadFile, input])
+
+  const handleCopy = useCallback(async () => {
+    await copyToClipboard(input)
+  }, [copyToClipboard, input])
+
+  useMenubarActions({
+    fileOpen: handleOpen,
+    fileSave: handleSave,
+    fileSaveDisabled: !input,
+    editCopy: handleCopy,
+    editCopyDisabled: !input,
+    panelMode,
+    onPanelModeChange: setPanelMode,
+  })
+
+  const lintBadge = lintResults !== null
+    ? <span className="text-[11px] text-muted-foreground">
+        {lintResults.length === 0 ? '✓ OK' : `${lintResults.length} issues`}
+      </span>
+    : null
 
   const editorPanel = (
     <>
       <FileIOBar
         label="Markdown"
-        value={input}
-        onLoad={setInput}
-        accept=".md,.markdown,.txt"
-        downloadFilename="document.md"
-        showDownload
+        actions={
+          <div className="flex items-center gap-1.5">
+            {lintBadge}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={lintResults !== null ? clearLint : runLint}
+              className="h-6 px-2 text-xs gap-1"
+            >
+              <CheckSquare className="h-3 w-3" />
+              {lintResults !== null ? 'Clear' : 'Lint'}
+            </Button>
+          </div>
+        }
       />
-      <div className="flex-1">
+      <div className="flex-1 overflow-hidden">
         <CodeEditor
           value={input}
           onChange={v => { setInput(v); if (lintResults !== null) clearLint() }}
@@ -114,10 +133,7 @@ export default function MarkdownEditor() {
 
   const previewPanel = (
     <>
-      <div className="flex h-8 items-center border-b border-border px-2 shrink-0"
-           style={{ background: 'hsl(var(--muted)/40%)' }}>
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Preview</span>
-      </div>
+      <FileIOBar label="Preview" />
       <div className="flex-1 overflow-auto p-6">
         <div
           className="prose prose-sm dark:prose-invert max-w-none"
@@ -127,83 +143,73 @@ export default function MarkdownEditor() {
     </>
   )
 
-  // Build main content (editor + optional preview)
   const mainContent = panelMode === 'single'
     ? <div className="flex flex-col h-full">{editorPanel}</div>
-    : <DualPanelLayout left={<div className="flex flex-col h-full">{editorPanel}</div>} right={previewPanel} />
+    : <DualPanelLayout
+        left={<div className="flex flex-col h-full">{editorPanel}</div>}
+        right={previewPanel}
+      />
 
-  // If lint results exist, show a resizable diagnostics panel below
+  // Lint diagnostics panel
   if (lintResults !== null && lintResults.length > 0) {
     return (
-      <div className="flex flex-col h-full">
-        {toolbar}
-        <ResizablePanelGroup direction="vertical" className="flex-1">
-          <ResizablePanel defaultSize={75} minSize={40}>
-            {mainContent}
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={25} minSize={10}>
-            <div className="flex flex-col h-full">
-              <div className="flex h-8 items-center border-b border-border px-2 shrink-0"
-                   style={{ background: 'hsl(var(--muted)/40%)' }}>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  Problems
-                </span>
-              </div>
-              <ScrollArea className="flex-1">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-12">Line</th>
-                      <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-20">Rule</th>
-                      <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Message</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lintResults.map((r, i) => (
-                      <tr
-                        key={i}
-                        className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
-                        onClick={() => {
-                          editorRef.current?.revealLineInCenter(r.lineNumber)
-                          editorRef.current?.setPosition({ lineNumber: r.lineNumber, column: 1 })
-                          editorRef.current?.focus()
-                        }}
-                      >
-                        <td className="px-3 py-1 text-muted-foreground font-mono">{r.lineNumber}</td>
-                        <td className="px-3 py-1">
-                          <span className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">
-                            {r.ruleNames[0]}
+      <ResizablePanelGroup direction="vertical" className="h-full">
+        <ResizablePanel defaultSize={75} minSize={40}>
+          {mainContent}
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={25} minSize={10}>
+          <div className="flex flex-col h-full">
+            <FileIOBar label="Problems" />
+            <ScrollArea className="flex-1">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-12">Line</th>
+                    <th className="px-3 py-1.5 text-left font-medium text-muted-foreground w-20">Rule</th>
+                    <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lintResults.map((r, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => {
+                        editorRef.current?.revealLineInCenter(r.lineNumber)
+                        editorRef.current?.setPosition({ lineNumber: r.lineNumber, column: 1 })
+                        editorRef.current?.focus()
+                      }}
+                    >
+                      <td className="px-3 py-1 text-muted-foreground font-mono">{r.lineNumber}</td>
+                      <td className="px-3 py-1">
+                        <span className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">
+                          {r.ruleNames[0]}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1">
+                        <div className="flex items-start gap-1.5">
+                          <AlertTriangle className="h-3 w-3 text-yellow-500 mt-0.5 shrink-0" />
+                          <span>
+                            {r.ruleDescription}
+                            {r.errorDetail && <span className="text-muted-foreground"> — {r.errorDetail}</span>}
                           </span>
-                        </td>
-                        <td className="px-3 py-1">
-                          <div className="flex items-start gap-1.5">
-                            <AlertTriangle className="h-3 w-3 text-yellow-500 mt-0.5 shrink-0" />
-                            <span>
-                              {r.ruleDescription}
-                              {r.errorDetail && (
-                                <span className="text-muted-foreground"> — {r.errorDetail}</span>
-                              )}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ScrollArea>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     )
   }
 
-  // Lint passed (0 issues) — show a brief status row
   if (lintResults !== null && lintResults.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        {toolbar}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/20 text-xs shrink-0">
           <Info className="h-3.5 w-3.5 text-green-500" />
           <span className="text-green-600 dark:text-green-400">No issues found</span>
@@ -213,10 +219,5 @@ export default function MarkdownEditor() {
     )
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      {toolbar}
-      {mainContent}
-    </div>
-  )
+  return mainContent
 }

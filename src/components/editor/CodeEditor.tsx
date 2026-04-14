@@ -1,5 +1,6 @@
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 
 interface CodeEditorProps {
   value: string
@@ -8,6 +9,8 @@ interface CodeEditorProps {
   readOnly?: boolean
   minHeight?: string
   onMount?: OnMount
+  /** Rendered as a VS Code–style status bar below the editor */
+  footer?: ReactNode
 }
 
 export function CodeEditor({
@@ -17,6 +20,7 @@ export function CodeEditor({
   readOnly = false,
   minHeight = '200px',
   onMount,
+  footer,
 }: CodeEditorProps) {
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains('dark')
@@ -34,37 +38,47 @@ export function CodeEditor({
   }, [])
 
   return (
-    <div className="h-full w-full overflow-hidden" style={{ minHeight }}>
-      <Editor
-        height="100%"
-        language={language}
-        value={value}
-        theme={isDark ? 'vs-dark' : 'vs'}
-        onChange={v => onChange?.(v ?? '')}
-        onMount={onMount}
-        beforeMount={monaco => {
-          monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-            target: monaco.languages.typescript.ScriptTarget.ES2020,
-            allowNonTsExtensions: true,
-            noEmit: false,
-            strict: false,
-          })
-        }}
-        options={{
-          readOnly,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          fontSize: 13,
-          lineNumbers: 'on',
-          wordWrap: 'on',
-          automaticLayout: true,
-          tabSize: 2,
-          padding: { top: 8, bottom: 8 },
-          renderWhitespace: 'none',
-          fixedOverflowWidgets: true,
-          scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-        }}
-      />
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ minHeight }}>
+      <div className="flex-1 overflow-hidden">
+        <Editor
+          height="100%"
+          language={language}
+          value={value}
+          theme={isDark ? 'vs-dark' : 'vs'}
+          onChange={v => onChange?.(v ?? '')}
+          onMount={onMount}
+          beforeMount={monaco => {
+            monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+              target: monaco.languages.typescript.ScriptTarget.ES2020,
+              allowNonTsExtensions: true,
+              noEmit: false,
+              strict: false,
+            })
+          }}
+          options={{
+            readOnly,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 13,
+            lineNumbers: 'on',
+            wordWrap: 'on',
+            automaticLayout: true,
+            tabSize: 2,
+            padding: { top: 8, bottom: 8 },
+            renderWhitespace: 'none',
+            fixedOverflowWidgets: true,
+            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+          }}
+        />
+      </div>
+      {footer && (
+        <div
+          className="flex h-[22px] shrink-0 items-center overflow-hidden text-[12px] text-white"
+          style={{ backgroundColor: '#007acc' }}
+        >
+          {footer}
+        </div>
+      )}
     </div>
   )
 }

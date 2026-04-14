@@ -4,8 +4,9 @@ import { vttToMarkdown } from './parser'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
 import { DualPanelLayout } from '@/components/layout/DualPanelLayout'
-import { ToolToolbar } from '@/components/layout/ToolToolbar'
 import { Button } from '@/components/ui/button'
+import { useFileIO } from '@/hooks/useFileIO'
+import { useMenubarActions } from '@/hooks/useMenubarActions'
 
 const STAR_WARS_VTT = `WEBVTT
 
@@ -67,24 +68,21 @@ export default function VttToMarkdown() {
   const [error, setError] = useState('')
   const [includeTimestamps, setIncludeTimestamps] = useState(false)
   const didAutoRun = useRef(false)
+  const { openFile, downloadFile, copyToClipboard } = useFileIO()
 
   const runWith = useCallback((text: string, timestamps: boolean) => {
     setError('')
     if (!text.trim()) return
     try {
-      const md = vttToMarkdown(text, { includeTimestamps: timestamps })
-      setOutput(md)
+      setOutput(vttToMarkdown(text, { includeTimestamps: timestamps }))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setOutput('')
     }
   }, [])
 
-  const run = useCallback(() => {
-    runWith(input, includeTimestamps)
-  }, [input, includeTimestamps, runWith])
+  const run = useCallback(() => runWith(input, includeTimestamps), [input, includeTimestamps, runWith])
 
-  // Auto-run on mount with the example VTT
   useEffect(() => {
     if (!didAutoRun.current) {
       didAutoRun.current = true
@@ -92,67 +90,72 @@ export default function VttToMarkdown() {
     }
   }, [runWith])
 
-  function handleLoad(text: string) {
-    setInput(text)
-    // Auto-run immediately with the new content
-    runWith(text, includeTimestamps)
-  }
+  const handleOpen = useCallback(async () => {
+    try {
+      const text = await openFile('.vtt,.txt')
+      setInput(text)
+      runWith(text, includeTimestamps)
+    } catch { /* cancelled */ }
+  }, [openFile, includeTimestamps, runWith])
+
+  const handleSave = useCallback(() => {
+    downloadFile(output, 'transcript.md', 'text/markdown')
+  }, [downloadFile, output])
+
+  const handleCopy = useCallback(async () => {
+    await copyToClipboard(output)
+  }, [copyToClipboard, output])
+
+  useMenubarActions({
+    fileOpen: handleOpen,
+    fileOpenAccept: '.vtt,.txt',
+    fileSave: handleSave,
+    fileSaveDisabled: !output,
+    editCopy: handleCopy,
+    editCopyDisabled: !output,
+  })
 
   return (
-    <div className="flex flex-col h-full">
-      <ToolToolbar
-        left={
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={includeTimestamps}
-              onChange={e => {
-                setIncludeTimestamps(e.target.checked)
-                runWith(input, e.target.checked)
-              }}
-              className="h-3 w-3"
-            />
-            Include timestamps
-          </label>
-        }
-        right={
-          <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
-            <Play className="h-3 w-3" />
-            Convert
-          </Button>
-        }
-        error={error}
-      />
-      <DualPanelLayout
-        left={
-          <>
-            <FileIOBar
-              label="Input VTT"
-              value={input}
-              onLoad={handleLoad}
-              accept=".vtt,.txt"
-              showDownload={false}
-            />
-            <div className="flex-1">
-              <CodeEditor value={input} onChange={setInput} language="plaintext" />
-            </div>
-          </>
-        }
-        right={
-          <>
-            <FileIOBar
-              label="Output Markdown"
-              value={output}
-              downloadFilename="transcript.md"
-              downloadMime="text/markdown"
-              showDownload
-            />
-            <div className="flex-1">
-              <CodeEditor value={output} language="markdown" readOnly />
-            </div>
-          </>
-        }
-      />
-    </div>
+    <DualPanelLayout
+      left={
+        <>
+          <FileIOBar
+            label="Input VTT"
+            actions={
+              <div className="flex items-center gap-2">
+                {error && <span className="text-[11px] text-destructive max-w-[180px] truncate">{error}</span>}
+                <label className="flex cursor-pointer items-center gap-1.5 select-none text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={includeTimestamps}
+                    onChange={e => {
+                      setIncludeTimestamps(e.target.checked)
+                      runWith(input, e.target.checked)
+                    }}
+                    className="h-3 w-3"
+                  />
+                  Timestamps
+                </label>
+                <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
+                  <Play className="h-3 w-3" />
+                  Convert
+                </Button>
+              </div>
+            }
+          />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor value={input} onChange={setInput} language="plaintext" />
+          </div>
+        </>
+      }
+      right={
+        <>
+          <FileIOBar label="Output Markdown" />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor value={output} language="markdown" readOnly />
+          </div>
+        </>
+      }
+    />
   )
 }

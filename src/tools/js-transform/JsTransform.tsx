@@ -6,20 +6,18 @@ import yaml from 'js-yaml'
 import { XMLParser } from 'fast-xml-parser'
 import { CodeEditor } from '@/components/editor/CodeEditor'
 import { FileIOBar } from '@/components/editor/FileIOBar'
+import { StatusBarSelect } from '@/components/editor/StatusBarSelect'
 import { TriplePanelLayout } from '@/components/layout/TriplePanelLayout'
-import { ToolToolbar } from '@/components/layout/ToolToolbar'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useFileIO } from '@/hooks/useFileIO'
+import { useMenubarActions } from '@/hooks/useMenubarActions'
 
 type InputFormat = 'json' | 'yaml' | 'xml'
 type CodeLang = 'typescript' | 'javascript'
+
+const FORMAT_OPTIONS = [['json', 'JSON'], ['yaml', 'YAML'], ['xml', 'XML']] as const
+const LANG_OPTIONS = [['typescript', 'TypeScript'], ['javascript', 'JavaScript']] as const
 
 const DEFAULT_INPUT = JSON.stringify([
   { name: 'Luke Skywalker', side: 'light', species: 'Human', homeworld: 'Tatooine', midichlorians: 20000 },
@@ -57,10 +55,7 @@ function transform(data: { name: string; side: string; midichlorians: number | n
 }
 `
 
-interface LogEntry {
-  type: 'log' | 'error' | 'warn'
-  args: string
-}
+interface LogEntry { type: 'log' | 'error' | 'warn'; args: string }
 
 function parseInput(raw: string, format: InputFormat): unknown {
   switch (format) {
@@ -71,6 +66,11 @@ function parseInput(raw: string, format: InputFormat): unknown {
       return parser.parse(raw)
     }
   }
+}
+
+function formatArg(a: unknown): string {
+  if (typeof a === 'string') return a
+  try { return JSON.stringify(a, null, 2) } catch { return String(a) }
 }
 
 export default function JsTransform() {
@@ -85,6 +85,7 @@ export default function JsTransform() {
   const monacoRef = useRef<Monaco | null>(null)
   const logsRef = useRef<LogEntry[]>([])
   const didAutoRun = useRef(false)
+  const { openFile, downloadFile, copyToClipboard } = useFileIO()
 
   const run = useCallback(async () => {
     setError('')
@@ -92,15 +93,9 @@ export default function JsTransform() {
     setLogs([])
 
     const capturedConsole = {
-      log: (...args: unknown[]) => {
-        logsRef.current.push({ type: 'log', args: args.map(a => formatArg(a)).join(' ') })
-      },
-      warn: (...args: unknown[]) => {
-        logsRef.current.push({ type: 'warn', args: args.map(a => formatArg(a)).join(' ') })
-      },
-      error: (...args: unknown[]) => {
-        logsRef.current.push({ type: 'error', args: args.map(a => formatArg(a)).join(' ') })
-      },
+      log: (...args: unknown[]) => { logsRef.current.push({ type: 'log', args: args.map(formatArg).join(' ') }) },
+      warn: (...args: unknown[]) => { logsRef.current.push({ type: 'warn', args: args.map(formatArg).join(' ') }) },
+      error: (...args: unknown[]) => { logsRef.current.push({ type: 'error', args: args.map(formatArg).join(' ') }) },
     }
 
     try {
@@ -114,13 +109,9 @@ export default function JsTransform() {
             const getWorker = await monacoRef.current.languages.typescript.getTypeScriptWorker()
             const worker = await getWorker(model.uri)
             const emitOutput = await worker.getEmitOutput(model.uri.toString())
-            if (emitOutput.outputFiles.length > 0) {
-              jsCode = emitOutput.outputFiles[0].text
-            }
+            if (emitOutput.outputFiles.length > 0) jsCode = emitOutput.outputFiles[0].text
           }
-        } catch {
-          // Fall back to treating as plain JS
-        }
+        } catch { /* fall back to plain JS */ }
       }
 
       // eslint-disable-next-line no-new-func
@@ -134,25 +125,48 @@ export default function JsTransform() {
     }
   }, [input, code, format, codeLang])
 
-  // Auto-run on mount
   useEffect(() => {
     if (!didAutoRun.current) {
       didAutoRun.current = true
-      // Slight delay to let Monaco initialize
       const timer = setTimeout(() => { run() }, 300)
       return () => clearTimeout(timer)
     }
   }, [run])
 
+  const handleOpenData = useCallback(async () => {
+    try {
+      const text = await openFile('.json,.yaml,.yml,.xml')
+      setInput(text)
+    } catch { /* cancelled */ }
+  }, [openFile])
+
+  const handleSave = useCallback(() => {
+    downloadFile(output, 'output.json', 'application/json')
+  }, [downloadFile, output])
+
+  const handleCopy = useCallback(async () => {
+    await copyToClipboard(output)
+  }, [copyToClipboard, output])
+
+  useMenubarActions({
+    fileOpen: handleOpenData,
+    fileOpenAccept: '.json,.yaml,.yml,.xml',
+    fileSave: handleSave,
+    fileSaveDisabled: !output,
+    editCopy: handleCopy,
+    editCopyDisabled: !output,
+  })
+
   const consolePanel = (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between h-8 border-b border-border px-2 shrink-0"
-           style={{ background: 'hsl(var(--muted)/40%)' }}>
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Console</span>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLogs([])} title="Clear">
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
+      <FileIOBar
+        label="Console"
+        actions={
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLogs([])} title="Clear">
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        }
+      />
       <ScrollArea className="flex-1 font-mono text-xs p-2">
         {logs.length === 0 && !error ? (
           <span className="text-muted-foreground">No output yet.</span>
@@ -177,106 +191,67 @@ export default function JsTransform() {
     </div>
   )
 
-  const inputFormatSelect = (
-    <Select value={format} onValueChange={v => setFormat(v as InputFormat)}>
-      <SelectTrigger className="h-5 w-20 text-[11px] border-0 bg-transparent px-1 focus:ring-0 gap-1">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="json">JSON</SelectItem>
-        <SelectItem value="yaml">YAML</SelectItem>
-        <SelectItem value="xml">XML</SelectItem>
-      </SelectContent>
-    </Select>
-  )
-
-  const langSelect = (
-    <Select value={codeLang} onValueChange={v => setCodeLang(v as CodeLang)}>
-      <SelectTrigger className="h-5 w-24 text-[11px] border-0 bg-transparent px-1 focus:ring-0 gap-1">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="typescript">TypeScript</SelectItem>
-        <SelectItem value="javascript">JavaScript</SelectItem>
-      </SelectContent>
-    </Select>
-  )
-
   return (
-    <div className="flex flex-col h-full">
-      <ToolToolbar
-        error={error}
-        right={
-          <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
-            <Play className="h-3 w-3" />
-            Run
-          </Button>
-        }
-      />
-      <TriplePanelLayout
-        left={
-          <>
-            <FileIOBar
-              label="Input Data"
+    <TriplePanelLayout
+      left={
+        <>
+          <FileIOBar label="Input Data" />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor
               value={input}
-              onLoad={setInput}
-              accept=".json,.yaml,.yml,.xml"
-              showDownload={false}
-              formatSelect={inputFormatSelect}
+              onChange={setInput}
+              language={format === 'yaml' ? 'yaml' : format === 'xml' ? 'xml' : 'json'}
+              footer={
+                <StatusBarSelect
+                  value={format}
+                  options={FORMAT_OPTIONS}
+                  onChange={v => setFormat(v as InputFormat)}
+                />
+              }
             />
-            <div className="flex-1">
-              <CodeEditor
-                value={input}
-                onChange={setInput}
-                language={format === 'yaml' ? 'yaml' : format === 'xml' ? 'xml' : 'json'}
-              />
-            </div>
-          </>
-        }
-        center={
-          <>
-            <FileIOBar
-              label="Transform"
+          </div>
+        </>
+      }
+      center={
+        <>
+          <FileIOBar
+            label="Transform"
+            actions={
+              <Button size="sm" onClick={run} className="h-6 px-2 text-xs gap-1">
+                <Play className="h-3 w-3" />
+                Run
+              </Button>
+            }
+          />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor
               value={code}
-              onLoad={setCode}
-              accept=".ts,.js"
-              showDownload={false}
-              formatSelect={langSelect}
+              onChange={setCode}
+              language={codeLang}
+              onMount={(editor, monaco) => {
+                editorRef.current = editor
+                monacoRef.current = monaco
+              }}
+              footer={
+                <StatusBarSelect
+                  value={codeLang}
+                  options={LANG_OPTIONS}
+                  onChange={v => setCodeLang(v as CodeLang)}
+                />
+              }
             />
-            <div className="flex-1">
-              <CodeEditor
-                value={code}
-                onChange={setCode}
-                language={codeLang}
-                onMount={(editor, monaco) => {
-                  editorRef.current = editor
-                  monacoRef.current = monaco
-                }}
-              />
-            </div>
-          </>
-        }
-        right={
-          <>
-            <FileIOBar
-              label="Output"
-              value={output}
-              downloadFilename="output.json"
-              downloadMime="application/json"
-              showDownload
-            />
-            <div className="flex-1">
-              <CodeEditor value={output} language="json" readOnly />
-            </div>
-          </>
-        }
-        console={consolePanel}
-      />
-    </div>
+          </div>
+        </>
+      }
+      right={
+        <>
+          <FileIOBar label="Output" />
+          <div className="flex-1 overflow-hidden">
+            <CodeEditor value={output} language="json" readOnly />
+          </div>
+        </>
+      }
+      console={consolePanel}
+    />
   )
-}
-
-function formatArg(a: unknown): string {
-  if (typeof a === 'string') return a
-  try { return JSON.stringify(a, null, 2) } catch { return String(a) }
 }
