@@ -68,8 +68,54 @@ export function mergeConsecutiveSpeakers(cues: VttCue[]): VttCue[] {
   return merged
 }
 
+export function parseSrt(raw: string): VttCue[] {
+  const lines = raw.split(/\r?\n/)
+  const cues: VttCue[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+
+    if (!line || /^\d+$/.test(line)) { i++; continue }
+
+    if (line.includes('-->')) {
+      // Normalize SRT timestamps (commas → periods for ms separator)
+      const normalized = line.replace(/,/g, '.')
+      const [startRaw] = normalized.split('-->')
+      const start = formatTimestamp(startRaw.trim())
+
+      const textLines: string[] = []
+      i++
+      while (i < lines.length && lines[i].trim() !== '') {
+        // Strip HTML-like tags some SRT files include
+        textLines.push(lines[i].trim().replace(/<[^>]+>/g, ''))
+        i++
+      }
+
+      const fullText = textLines.join(' ').trim()
+      if (!fullText) continue
+
+      // Detect "Speaker Name: text" — speaker must be 1-4 word-like tokens
+      const speakerMatch = fullText.match(/^((?:[\w-]+(?:\s+[\w-]+){0,3})):\s+(.+)$/)
+      if (speakerMatch) {
+        cues.push({ start, speaker: speakerMatch[1].trim(), text: speakerMatch[2].trim() })
+      } else {
+        cues.push({ start, speaker: '', text: fullText })
+      }
+    } else {
+      i++
+    }
+  }
+
+  return cues
+}
+
+export function detectFormat(raw: string): 'vtt' | 'srt' {
+  return raw.trimStart().startsWith('WEBVTT') ? 'vtt' : 'srt'
+}
+
 export function vttToMarkdown(raw: string, opts: ConversionOptions): string {
-  const cues = parseVtt(raw)
+  const cues = detectFormat(raw) === 'vtt' ? parseVtt(raw) : parseSrt(raw)
   const merged = mergeConsecutiveSpeakers(cues)
 
   return merged

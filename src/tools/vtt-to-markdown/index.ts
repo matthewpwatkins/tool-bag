@@ -4,9 +4,9 @@ import type { ToolDefinition } from '../types'
 
 const tool: ToolDefinition = {
   id: 'vtt-to-markdown',
-  name: 'VTT to Markdown',
+  name: 'Transcript to Markdown',
   category: 'transform',
-  description: 'Convert WebVTT meeting transcripts to Markdown',
+  description: 'Convert VTT or SRT meeting transcripts to Markdown',
   icon: Captions,
   component: lazy(() => import('./VttToMarkdown')),
 }

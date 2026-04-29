@@ -1,4 +1,4 @@
-import { Settings2, Shuffle, BookOpen, Zap, Sun, Moon, HelpCircle } from 'lucide-react'
+import { Settings2, Shuffle, BookOpen, Zap, GitCompare, Sun, Moon, HelpCircle } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { CATEGORY_LABELS, type ToolCategory } from '@/tools/types'
 
@@ -7,9 +7,10 @@ const CATEGORY_ICONS: Record<ToolCategory, React.ComponentType<{ className?: str
   convert: Shuffle,
   markdown: BookOpen,
   transform: Zap,
+  compare: GitCompare,
 }
 
-const CATEGORY_ORDER: ToolCategory[] = ['format', 'convert', 'markdown', 'transform']
+const CATEGORY_ORDER: ToolCategory[] = ['format', 'convert', 'markdown', 'transform', 'compare']
 
 interface ActivityBarProps {
   activeCategory: ToolCategory

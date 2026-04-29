@@ -92,7 +92,7 @@ export default function VttToMarkdown() {
 
   const handleOpen = useCallback(async () => {
     try {
-      const text = await openFile('.vtt,.txt')
+      const text = await openFile('.vtt,.srt,.txt')
       setInput(text)
       runWith(text, includeTimestamps)
     } catch { /* cancelled */ }
@@ -108,7 +108,7 @@ export default function VttToMarkdown() {
 
   useMenubarActions({
     fileOpen: handleOpen,
-    fileOpenAccept: '.vtt,.txt',
+    fileOpenAccept: '.vtt,.srt,.txt',
     fileSave: handleSave,
     fileSaveDisabled: !output,
     editCopy: handleCopy,
@@ -120,7 +120,7 @@ export default function VttToMarkdown() {
       left={
         <>
           <FileIOBar
-            label="Input VTT"
+            label="Input VTT / SRT"
             actions={
               <div className="flex items-center gap-2">
                 {error && <span className="text-[11px] text-destructive max-w-[180px] truncate">{error}</span>}
