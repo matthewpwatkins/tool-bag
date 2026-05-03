@@ -59,7 +59,7 @@ export function mergeConsecutiveSpeakers(cues: VttCue[]): VttCue[] {
   const merged: VttCue[] = []
   for (const cue of cues) {
     const last = merged[merged.length - 1]
-    if (last && last.speaker === cue.speaker && cue.speaker !== '') {
+    if (last && last.speaker === cue.speaker) {
       last.text = last.text + ' ' + cue.text
     } else {
       merged.push({ ...cue })
@@ -118,8 +118,14 @@ export function vttToMarkdown(raw: string, opts: ConversionOptions): string {
   const cues = detectFormat(raw) === 'vtt' ? parseVtt(raw) : parseSrt(raw)
   const merged = mergeConsecutiveSpeakers(cues)
 
+  const distinctSpeakers = new Set(merged.map(c => c.speaker).filter(s => s !== ''))
+  const showLabels = distinctSpeakers.size > 1
+
   return merged
     .map(cue => {
+      if (!showLabels) {
+        return opts.includeTimestamps ? `**(${cue.start})** ${cue.text}` : cue.text
+      }
       const speaker = cue.speaker || 'Unknown'
       // Timestamps go inside the bold name section: **Speaker (0:00:32)**: text
       const boldLabel = opts.includeTimestamps
