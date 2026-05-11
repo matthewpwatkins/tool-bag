@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
-import { marked } from 'marked'
+import { Marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
+import hljs from 'highlight.js'
 import { CheckSquare, AlertTriangle, Info } from 'lucide-react'
 import { lint } from 'markdownlint/sync'
 import type { editor as monacoEditor } from 'monaco-editor'
@@ -13,8 +15,19 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { useToolPrefs } from '@/hooks/useToolPrefs'
 import { useFileIO } from '@/hooks/useFileIO'
 import { useMenubarActions } from '@/hooks/useMenubarActions'
+import './highlight.css'
 
-marked.setOptions({ async: false })
+const marked = new Marked(
+  { async: false },
+  markedHighlight({
+    emptyLangClass: 'hljs',
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+      return hljs.highlight(code, { language }).value
+    },
+  }),
+)
 
 interface LintResult {
   lineNumber: number
@@ -62,11 +75,29 @@ Those who are sensitive to the Force can:
 
 Han Solo famously made the Kessel Run in \`12 parsecs\`. The route required navigating near the Maw cluster of black holes, and a shorter path meant a faster time — it was a test of *nerve*, not speed.
 
+\`\`\`json
+{
+  "ship": "Millennium Falcon",
+  "captain": "Han Solo",
+  "copilot": "Chewbacca",
+  "kessel_run_parsecs": 12,
+  "modifications": ["hyperdrive", "quad laser cannons", "concussion missiles"],
+  "registry": null,
+  "stolen": true
+}
 \`\`\`
-Distance: 12 parsecs
-Ship: Millennium Falcon
-Pilot: Han Solo
-Copilot: Chewbacca
+
+\`\`\`typescript
+interface Jedi {
+  name: string
+  rank: 'padawan' | 'knight' | 'master'
+  midiChlorians: number
+}
+
+function senseDisturbance(jedi: Jedi): string {
+  // I felt a great disturbance in the Force
+  return \`\${jedi.name} senses something...\`
+}
 \`\`\`
 `
 
@@ -78,7 +109,7 @@ export default function MarkdownEditor() {
   const { panelMode, setPanelMode } = useToolPrefs('markdown-editor')
   const { openFile, downloadFile, copyToClipboard } = useFileIO()
 
-  const html = marked(input) as string
+  const html = marked.parse(input) as string
 
   const runLint = useCallback(() => {
     const results = lint({ strings: { content: input }, config: { default: true } })
